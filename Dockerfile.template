@@ -4,6 +4,7 @@ ENV S6OVERLAY_RELEASE https://github.com/just-containers/s6-overlay/releases/dow
 COPY install.sh /usr/local/bin/install.sh
 COPY VERSION /etc/docker-pi-hole-version
 ENV PIHOLE_INSTALL /root/ph_install.sh
+ENV CONFIG_DIR /etc/pihole
 
 RUN bash -ex install.sh 2>&1 && \
     rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
@@ -38,6 +39,8 @@ ENV DNSMASQ_USER root
 ENV VERSION {{ pihole.version }}
 ENV ARCH {{ pihole.arch }}
 ENV PATH /opt/pihole:${PATH}
+
+VOLUME $CONFIG_DIR
 
 LABEL image="{{ pihole.name }}:{{ pihole.version }}_{{ pihole.arch }}"
 LABEL maintainer="{{ pihole.maintainer }}"

@@ -27,13 +27,7 @@ echo " ::: Starting docker specific checks & setup for docker pihole/pihole"
 
 docker_checks
 
-# TODO:
-#if [ ! -f /.piholeFirstBoot ] ; then
-#    echo " ::: Not first container startup so not running docker's setup, re-create container to run setup again"
-#else
-#    regular_setup_functions
-#fi
-
+detect_initial_setup
 fix_capabilities
 generate_password
 validate_env || exit 1
@@ -49,7 +43,5 @@ setup_ipv4_ipv6
 setup_lighttpd_bind "$ServerIP"
 setup_blocklists
 test_configs
-
-[ -f /.piholeFirstBoot ] && rm /.piholeFirstBoot
 
 echo " ::: Docker start setup complete"

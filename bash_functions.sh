@@ -117,7 +117,7 @@ setup_dnsmasq_dns() {
     fi;
 
     # TODO With the addition of this to /start.sh this needs a refactor
-    if [ ! -f /.piholeFirstBoot ] ; then
+    if [ "$INITIAL_SETUP" != true ] ; then
         local setupDNS1="$(grep 'PIHOLE_DNS_1' ${setupVars})"
         local setupDNS2="$(grep 'PIHOLE_DNS_2' ${setupVars})"
         setupDNS1="${setupDNS1/PIHOLE_DNS_1=/}"
@@ -380,3 +380,16 @@ setup_var_exists() {
     fi
 }
 
+
+detect_initial_setup() {
+    # Allow users to set an env to force or disable INITIAL_SETUP
+    if [ -z "$INITIAL_SETUP" ] ; then
+        # Otherwise we'll try to figure things out
+        INITIAL_SETUP=false
+        if [ -f /.container_first_boot ] ; then
+            echo "Initial setup needed"
+            INITIAL_SETUP=true
+            rm /.container_first_boot
+        fi
+    fi
+}

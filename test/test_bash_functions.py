@@ -66,8 +66,7 @@ def test_bad_input_to_WEB_PORT(Docker, test_args, expected_error):
 def test_override_default_servers_with_DNS_EnvVars(Docker, Slow, args_env, expected_stdout, dns1, dns2):
     ''' on first boot when DNS vars are NOT set explain default google DNS settings are used
                    or when DNS vars are set override the pihole DNS settings '''
-    assert Docker.run('test -f /.piholeFirstBoot').rc == 0
-    function = Docker.run('. /bash_functions.sh ; eval `grep "^setup_dnsmasq " /start.sh`')
+    function = Docker.run('. /bash_functions.sh ; export INITIAL_SETUP=true ; eval `grep "^setup_dnsmasq " /start.sh`')
     assert expected_stdout in function.stdout
     expected_servers = 'server={}\n'.format(dns1) if dns2 == None else 'server={}\nserver={}\n'.format(dns1, dns2)
     Slow(lambda: expected_servers == Docker.run('grep "^server=" /etc/dnsmasq.d/01-pihole.conf').stdout)
@@ -76,7 +75,6 @@ def test_override_default_servers_with_DNS_EnvVars(Docker, Slow, args_env, expec
 @pytest.mark.skipif(os.environ.get('TRAVIS') == 'true',
                     reason="Can't get setupVar setup to work on travis")
 @pytest.mark.parametrize('args_env, dns1, dns2, expected_stdout', [
-
     ('', '9.9.9.1', '9.9.9.2',
      'Existing DNS servers used'),
     ('-e DNS1="1.2.3.4"', '9.9.9.1', '9.9.9.2',
@@ -84,16 +82,12 @@ def test_override_default_servers_with_DNS_EnvVars(Docker, Slow, args_env, expec
     ('-e DNS2="1.2.3.4"', '8.8.8.8', None,
      'Docker DNS variables not used\nExisting DNS servers used (8.8.8.8 & unset)'),
     ('-e DNS1="1.2.3.4" -e DNS2="2.2.3.4"', '1.2.3.4', '2.2.3.4',
-     'Docker DNS variables not used\nExisting DNS servers used (1.2.3.4 & 2.2.3.4'),
+     'Docker DNS variables not used\nExisting DNS servers used (1.2.3.4 & 2.2.3.4)'),
 ])
 def test_DNS_Envs_are_secondary_to_setupvars(Docker, Slow, args_env, expected_stdout, dns1, dns2):
     ''' on second boot when DNS vars are set just use pihole DNS settings
                     or when DNS vars and FORCE_DNS var are set override the pihole DNS settings '''
-    # Given we are not booting for the first time
-    assert Docker.run('rm /.piholeFirstBoot').rc == 0
-
-    # and a user already has custom pihole dns variables in setup vars
-    dns_count = 1
+    # a user already has custom pihole dns variables in setup vars
     setupVars = '/etc/pihole/setupVars.conf'
     Docker.run('sed -i "/^PIHOLE_DNS/ d" {}'.format(setupVars))
     Docker.run('echo "PIHOLE_DNS_1={}" | tee -a {}'.format(dns1, setupVars))
@@ -103,7 +97,8 @@ def test_DNS_Envs_are_secondary_to_setupvars(Docker, Slow, args_env, expected_st
     Slow(lambda: 'PIHOLE_DNS' in Docker.run('cat {}'.format(setupVars)).stdout)
 
     # When we run setup dnsmasq during startup of the container
-    function = Docker.run('. /bash_functions.sh ; eval `grep "^setup_dnsmasq " /start.sh`')
+    function = Docker.run('. /bash_functions.sh ; export INITIAL_SETUP=false ; eval `grep "^setup_dnsmasq " /start.sh`')
+    print(function.stdout)
     assert expected_stdout in function.stdout
 
     # Then the servers are still what the user had customized if forced dnsmasq is not set
@@ -112,6 +107,7 @@ def test_DNS_Envs_are_secondary_to_setupvars(Docker, Slow, args_env, expected_st
         expected_servers.append('server={}'.format(dns2))
     Slow(lambda: Docker.run('grep "^server=" /etc/dnsmasq.d/01-pihole.conf').stdout.strip().split('\n') == \
          expected_servers)
+    print('=== end test ===')
 
 
 @pytest.mark.parametrize('args_env, expected_stdout, expected_config_line', [
