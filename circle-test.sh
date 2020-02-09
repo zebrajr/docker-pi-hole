@@ -12,7 +12,7 @@ if [[ "$1" == "enter" ]]; then
 fi
 
 # generate and build dockerfile
-docker build -t image_pipenv -f Dockerfile_build .
+docker build -t image_pipenv -f circle-Dockerfile .
 env > /tmp/env
 docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
@@ -22,7 +22,7 @@ docker run --rm \
     --env-file /tmp/env \
     $enter image_pipenv
 
-docker images
+docker images | head
 
 test -z "${CIRCLE_PROJECT_REPONAME}" && exit 0
 # The rest is circle-ci only

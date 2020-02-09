@@ -1,6 +1,6 @@
 
 import functools
-import os
+from pathlib import Path
 import pytest
 import testinfra
 import types
@@ -9,8 +9,8 @@ local_host = testinfra.get_host('local://')
 check_output = local_host.check_output
 
 __version__ = None
-dotdot = os.path.abspath(os.path.join(os.path.abspath(__file__), os.pardir, os.pardir))
-with open('{}/VERSION'.format(dotdot), 'r') as v:
+docker_dir = Path('./docker/')
+with open('{}/VERSION'.format(str(docker_dir)), 'r') as v:
     raw_version = v.read().strip()
     __version__ = raw_version.replace('release/', 'release-')
 
