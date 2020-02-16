@@ -128,8 +128,10 @@ def build(docker_repo, arch, args):
     no_cache = ''
     if args['--no-cache']:
         no_cache = '--no-cache'
-    build_command = '{time}docker build {no_cache} --pull --cache-from="{cache},{create_tag}" -f {dockerfile} -t {create_tag} .'\
-        .format(time=time, no_cache=no_cache, cache=cached_image, dockerfile=dockerfile, create_tag=repo_tag)
+    #build_command = '{time}docker build {no_cache} --pull --cache-from="{cache},{create_tag}" -f {dockerfile} -t {create_tag} .'\
+    #    .format(time=time, no_cache=no_cache, cache=cached_image, dockerfile=dockerfile, create_tag=repo_tag)
+    build_command = '{time}docker build {no_cache} --pull -f {dockerfile} -t {create_tag} .'\
+        .format(time=time, no_cache=no_cache, dockerfile=dockerfile, create_tag=repo_tag)
     print(" ::: Building {} into {}".format(dockerfile, repo_tag))
     run_and_stream_command_output(build_command, args)
     if args['-v']:

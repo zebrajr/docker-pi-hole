@@ -6,7 +6,7 @@ version: 2
   steps:
     - checkout
     - run:
-        command: ./circle-test.sh
+        command: ./circle-build.sh
     - persist_to_workspace:
         root: .
         paths: [ 'ci-workspace' ]
