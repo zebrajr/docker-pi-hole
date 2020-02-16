@@ -75,7 +75,7 @@ A [Docker](https://www.docker.com/what-docker) project to make a lightweight x86
 
 This container uses 2 popular ports, port 53 and port 80, so **may conflict with existing applications ports**.  If you have no other services or docker containers using port 53/80 (if you do, keep reading below for a reverse proxy example), the minimum arguments required to run this container are in the script [docker_run.sh](https://github.com/pi-hole/docker-pi-hole/blob/master/docker_run.sh)
 
-If you're using a Red Hat based distrubution with an SELinux Enforcing policy add `:z` to line with volumes like so:
+If you're using a Red Hat based distribution with an SELinux Enforcing policy add `:z` to line with volumes like so:
 
 ```
     -v "$(pwd)/etc-pihole/:/etc/pihole/:z" \
@@ -178,7 +178,7 @@ The primary docker tags / versions are explained in the following table.  [Click
 | tag                 | architecture | description                                                             | Dockerfile |
 | ---                 | ------------ | -----------                                                             | ---------- |
 | `latest`            | auto detect  | x86, arm, or arm64 container, docker auto detects your architecture.    | [Dockerfile](https://github.com/pi-hole/docker-pi-hole/blob/master/Dockerfile_amd64) |
-| `v4.0.0-1`          | auto detect  | Versioned tags, if you want to pin against a specific version, use one of thesse |  |
+| `v4.0.0-1`          | auto detect  | Versioned tags, if you want to pin against a specific version, use one of these |  |
 | `v4.0.0-1_<arch>`   | based on tag | Specific architectures tags | |
 | `dev`       | auto detect  | like latest tag, but for the development branch (pushed occasionally)   | |
 
