@@ -20,6 +20,7 @@ ENV PHP_ENV_CONFIG '/etc/lighttpd/conf-enabled/15-fastcgi-php.conf'
 ENV PHP_ERROR_LOG '/var/log/lighttpd/error.log'
 COPY ./start.sh /
 COPY ./bash_functions.sh /
+copy ./defaults.env /
 
 # IPv6 disable flag for networks/devices that do not support it
 ENV IPv6 True
@@ -34,7 +35,7 @@ ENV S6_KEEP_ENV 1
 ENV S6_BEHAVIOUR_IF_STAGE2_FAILS 2
 
 ENV IPV4_ADDRESS 0.0.0.0
-ENV FTL_CMD no-daemon
+ENV FTLARGS no-daemon
 ENV DNSMASQ_USER root
 
 ENV VERSION release-v5.0

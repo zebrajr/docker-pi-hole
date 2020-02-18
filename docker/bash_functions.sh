@@ -3,6 +3,47 @@ set -e
 # Some of the bash_functions use variables these core pi-hole/web scripts
 . /opt/pihole/webpage.sh
 
+
+not_managed_statement() {
+    local the_file="$1"
+    local the_bootstrap_env="$2"
+    if [ -z "$the_file" ] ; then
+        echo -e " ::: WARNING: '$the_file' appears to be empty and management was intentionally skipped due to user provided env var: "
+    else
+        echo -e " ::: '$the_file' management was intentionally skipped due to user provided env var: "
+    fi
+    echo -e "${the_bootstrap_env}=${!the_bootstrap_env}\n"
+}
+
+write_configs() {
+    # DOCKER_MANAGED_CONFIGS can be customized to disable management or add arbitrary new managements of simple files
+    # Managed configuration files ($prefix_TARGET_FILE) are full re-written one or more times depending on the BOOTSTRAP variables
+    # $prefix_BOOTSTRAP=(once|on-create|always)
+    # - `once` requires you have /etc/pihole setup as a volume during your first run to save the status of bootstrap
+    # - `on-create` will bootstrap any time you create a fresh pi-hole container (first time or on rm/destroy + create)
+    # - `always` will always bootstrap any time the container starts
+    for prefix in $DOCKER_MANAGED_CONFIGS; do
+        TARGET_FILE="${prefix}_TARGET_FILE"
+        BOOTSTRAP="${prefix}_BOOTSTRAP"
+
+        if [[ "${!BOOTSTRAP}" == "once" ]] && [[ -f "/etc/pihole/.docker_managed_configs" ]]; then 
+            not_managed_statement "${!TARGET_FILE}" "${BOOTSTRAP}"
+            return
+        elif [[ ${!BOOTSTRAP} == "on-create" ]] && [[ ! -f "/.piholeFirstBoot" ]]; then
+            not_managed_statement "${!TARGET_FILE}" "${BOOTSTRAP}"
+            return
+        fi
+
+        echo " ::: Managing config ${!TARGET_FILE}"
+        env | grep "^$prefix" \
+            | grep -v "^${prefix}_TARGET_FILE=" \
+            | grep -v "^${prefix}_BOOTSTRAP=" \
+            | sed 's|^'$prefix'_||g' \
+            > "${!TARGET_FILE}"
+    done
+    date > "/etc/pihole/.docker_managed_configs"
+}
+
 test_configs() {
     set -e
     echo -n '::: Testing pihole-FTL DNS: '
@@ -12,10 +53,6 @@ test_configs() {
     set +e
     echo "::: All config checks passed, cleared for startup ..."
 }
-
-
-
-
 
 
 

@@ -8,14 +8,9 @@ export adlistFile='/etc/pihole/adlists.list'
 # PH_TEST prevents the install from actually running (someone should rename that)
 
 echo " ::: Starting docker specific checks & setup for docker pihole/pihole"
-
-# Utilize core functions rather than implementing duplicative code in docker-pi-hole
-set -a
-. /etc/pihole/setupVars.conf
-set +a
-finalExports
-
 # docker-pi-hole customiztions
+set -a; source /defaults.env; set +a;
+write_configs
 test_configs
 
 # Nuke the first boot breadcrumb
