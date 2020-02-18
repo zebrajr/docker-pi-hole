@@ -5,6 +5,9 @@ ENV S6OVERLAY_RELEASE https://github.com/just-containers/s6-overlay/releases/dow
 
 COPY install.sh /usr/local/bin/install.sh
 COPY VERSION /etc/docker-pi-hole-version
+COPY BRANCH_CORE /etc/docker-pi-hole-core-branch
+COPY BRANCH_FTL /etc/docker-pi-hole-ftl-branch
+COPY BRANCH_WEB /etc/docker-pi-hole-web-branch
 ENV PIHOLE_INSTALL /root/ph_install.sh
 
 RUN bash -ex install.sh 2>&1 && \

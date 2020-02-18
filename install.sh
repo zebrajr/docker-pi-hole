@@ -1,20 +1,20 @@
 #!/bin/bash -ex
-
-mkdir -p /etc/pihole/
-mkdir -p /var/run/pihole
+# mkdir -p /etc/pihole/
+# mkdir -p /var/run/pihole
 # Production tags with valid web footers
-export CORE_VERSION="$(cat /etc/docker-pi-hole-version)"
-export WEB_VERSION="$(cat /etc/docker-pi-hole-version)"
+export CORE_BRANCH="$(cat /etc/docker-pi-hole-core-branch)"
+export FTL_BRANCH="$(cat /etc/docker-pi-hole-ftl-branch)"
+export WEB_BRANCH="$(cat /etc/docker-pi-hole-web-branch)"
 
 # Only use for pre-production / testing
-export CHECKOUT_BRANCHES=false
-# Search for release/* branch naming convention for custom checkouts
-if [[ "$CORE_VERSION" == *"release/"* ]] ; then
-    CHECKOUT_BRANCHES=true
-fi
+# export CHECKOUT_BRANCHES=false
+# # Search for release/* branch naming convention for custom checkouts
+# if [[ "$CORE_VERSION" == *"release/"* ]] ; then
+#     CHECKOUT_BRANCHES=true
+# fi
 
 apt-get update
-apt-get install --no-install-recommends -y curl procps ca-certificates
+apt-get install --no-install-recommends -y curl procps ca-certificates git
 curl -L -s $S6OVERLAY_RELEASE | tar xvzf - -C /
 mv /init /s6-init
 
@@ -22,10 +22,12 @@ mv /init /s6-init
 which debconf-apt-progress
 mv "$(which debconf-apt-progress)" /bin/no_debconf-apt-progress
 
-# Get the install functions
-curl https://raw.githubusercontent.com/pi-hole/pi-hole/${CORE_VERSION}/automated%20install/basic-install.sh > "$PIHOLE_INSTALL"
-PH_TEST=true . "${PIHOLE_INSTALL}"
+# grab the repositories and check out the required branches
+git clone https://github.com/pi-hole/pi-hole /etc/.pihole && cd /etc/.pihole && git checkout $CORE_BRANCH
+git clone https://github.com/pi-hole/adminlte /var/www/html/admin && cd /var/www/html/admin && git checkout $WEB_BRANCH
+echo "$FTL_BRANCH" || tee /etc/pihole/ftlbranch
 
+mkdir -p /etc/pihole/
 # Preseed variables to assist with using --unattended install
 {
   echo "PIHOLE_INTERFACE=eth0"
@@ -37,18 +39,17 @@ PH_TEST=true . "${PIHOLE_INSTALL}"
   echo "INSTALL_WEB_SERVER=true"
   echo "INSTALL_WEB_INTERFACE=true"
   echo "LIGHTTPD_ENABLED=true"
-}>> "${setupVars}"
-source $setupVars
+}>> /etc/pihole/setupVars.conf
 
-export USER=pihole
-distro_check
+# export USER=pihole
 
 # fix permission denied to resolvconf post-inst /etc/resolv.conf moby/moby issue #1297
 apt-get -y install debconf-utils
 echo resolvconf resolvconf/linkify-resolvconf boolean false | debconf-set-selections
 
 ln -s /bin/true /usr/local/bin/service
-bash -ex "./${PIHOLE_INSTALL}" --unattended
+# run the install script
+bash -ex /etc/.pihole/automated\ install/basic-install.sh --unattended
 rm /usr/local/bin/service
 
 # IPv6 support for nc openbsd better than traditional
@@ -66,21 +67,21 @@ fetch_release_metadata() {
     popd
 }
 
-if [[ $CHECKOUT_BRANCHES == true ]] ; then
-    ln -s /bin/true /usr/local/bin/service
-    ln -s /bin/true /usr/local/bin/update-rc.d
-    echo "${CORE_VERSION}" | sudo tee /etc/pihole/ftlbranch
-    echo y | bash -x pihole checkout core ${CORE_VERSION}
-    echo y | bash -x pihole checkout web ${WEB_VERSION}
-    # echo y | bash -x pihole checkout ftl ${CORE_VERSION}
-    # If the v is forgotten: ${CORE_VERSION/v/}
-    unlink /usr/local/bin/service
-    unlink /usr/local/bin/update-rc.d
-else
-    # Reset to our tags so version numbers get detected correctly
-    fetch_release_metadata "${PI_HOLE_LOCAL_REPO}" "${CORE_VERSION}"
-    fetch_release_metadata "${webInterfaceDir}" "${WEB_VERSION}"
-fi
+# if [[ $CHECKOUT_BRANCHES == true ]] ; then
+#     ln -s /bin/true /usr/local/bin/service
+#     ln -s /bin/true /usr/local/bin/update-rc.d
+#     echo "${CORE_VERSION}" | sudo tee /etc/pihole/ftlbranch
+#     echo y | bash -x pihole checkout core ${CORE_VERSION}
+#     echo y | bash -x pihole checkout web ${WEB_VERSION}
+#     # echo y | bash -x pihole checkout ftl ${CORE_VERSION}
+#     # If the v is forgotten: ${CORE_VERSION/v/}
+#     unlink /usr/local/bin/service
+#     unlink /usr/local/bin/update-rc.d
+# else
+#     # Reset to our tags so version numbers get detected correctly
+#     fetch_release_metadata "${PI_HOLE_LOCAL_REPO}" "${CORE_VERSION}"
+#     fetch_release_metadata "${webInterfaceDir}" "${WEB_VERSION}"
+# fi
 
 # FTL Armel fix not in prod yet
 # Remove once https://github.com/pi-hole/pi-hole/commit/3fbb0ac8dde14b8edc1982ae3a2a021f3cf68477 is in master
