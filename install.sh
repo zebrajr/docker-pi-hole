@@ -25,7 +25,7 @@ mv "$(which debconf-apt-progress)" /bin/no_debconf-apt-progress
 # grab the repositories and check out the required branches
 git clone https://github.com/pi-hole/pi-hole /etc/.pihole && cd /etc/.pihole && git checkout $CORE_BRANCH
 git clone https://github.com/pi-hole/adminlte /var/www/html/admin && cd /var/www/html/admin && git checkout $WEB_BRANCH
-echo "$FTL_BRANCH" || tee /etc/pihole/ftlbranch
+echo "$FTL_BRANCH" || tee /etc/pihole/ftlBranch
 
 mkdir -p /etc/pihole/
 # Preseed variables to assist with using --unattended install
