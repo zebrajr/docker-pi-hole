@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 # mkdir -p /etc/pihole/
-# mkdir -p /var/run/pihole
+mkdir -p /var/run/pihole
 # Production tags with valid web footers
 export CORE_BRANCH="$(cat /etc/docker-pi-hole-core-branch)"
 export FTL_BRANCH="$(cat /etc/docker-pi-hole-ftl-branch)"
