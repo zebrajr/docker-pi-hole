@@ -48,10 +48,10 @@ echo "${FTL_BRANCH}" | tee /etc/pihole/ftlbranch
 apt-get -y install debconf-utils
 echo resolvconf resolvconf/linkify-resolvconf boolean false | debconf-set-selections
 
-ln -s /bin/true /usr/local/bin/service
+# ln -s /bin/true /usr/local/bin/service
 # run the install script
 bash -ex /etc/.pihole/automated\ install/basic-install.sh --unattended
-rm /usr/local/bin/service
+# rm /usr/local/bin/service
 
 # IPv6 support for nc openbsd better than traditional
 apt-get install -y --force-yes netcat-openbsd
