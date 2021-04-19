@@ -145,10 +145,7 @@ setup_temp_unit "$TEMPERATUREUNIT"
 setup_ui_layout "$WEBUIBOXEDLAYOUT"
 setup_admin_email "$ADMIN_EMAIL"
 setup_dnsmasq "$INTERFACE" "$DNSMASQ_LISTENING_BEHAVIOUR"
-setup_php_env
 setup_dnsmasq_hostnames "$ServerIP" "$ServerIPv6" "$HOSTNAME"
-setup_ipv4_ipv6
-setup_lighttpd_bind "$ServerIP"
 setup_blocklists
 test_configs
 

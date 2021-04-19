@@ -15,16 +15,12 @@ prepare_configs() {
     # Done in /start.sh, don't do twice
     PH_TEST=true . "${PIHOLE_INSTALL}"
     # Set Debian webserver variables for installConfigs
-    LIGHTTPD_USER="www-data"
-    LIGHTTPD_GROUP="www-data"
-    LIGHTTPD_CFG="lighttpd.conf.debian"
     installConfigs
     touch "$setupVars"
     set +e
     mkdir -p /var/run/pihole /var/log/pihole
     # Re-apply perms from basic-install over any volume mounts that may be present (or not)
     # Also  similar to preflights for FTL https://github.com/pi-hole/pi-hole/blob/master/advanced/Templates/pihole-FTL.service
-    chown pihole:root /etc/lighttpd
     chown pihole:pihole "${PI_HOLE_CONFIG_DIR}/pihole-FTL.conf" "/var/log/pihole"
     chmod 644 "${PI_HOLE_CONFIG_DIR}/pihole-FTL.conf"
     touch /var/log/pihole-FTL.log /run/pihole-FTL.pid /run/pihole-FTL.port /var/log/pihole.log
@@ -157,56 +153,27 @@ setup_dnsmasq_hostnames() {
     fi
 }
 
-setup_lighttpd_bind() {
-    local serverip="$1"
-    # if using '--net=host' only bind lighttpd on $ServerIP and localhost
-    if grep -q "docker" /proc/net/dev && [[ $serverip != 0.0.0.0 ]]; then #docker (docker0 by default) should only be present on the host system
-        if ! grep -q "server.bind" /etc/lighttpd/lighttpd.conf ; then # if the declaration is already there, don't add it again
-            sed -i -E "s/server\.port\s+\=\s+([0-9]+)/server.bind\t\t = \"${serverip}\"\nserver.port\t\t = \1\n"\$SERVER"\[\"socket\"\] == \"127\.0\.0\.1:\1\" \{\}/" /etc/lighttpd/lighttpd.conf
-        fi
-    fi
-}
-
-setup_php_env() {
-    if [ -z "$VIRTUAL_HOST" ] ; then
-      VIRTUAL_HOST="$ServerIP"
-    fi;
-    local vhost_line="\t\t\t\"VIRTUAL_HOST\" => \"${VIRTUAL_HOST}\","
-    local serverip_line="\t\t\t\"ServerIP\" => \"${ServerIP}\","
-    local php_error_line="\t\t\t\"PHP_ERROR_LOG\" => \"${PHP_ERROR_LOG}\","
-
-    # idempotent line additions
-    grep -qP "$vhost_line" "$PHP_ENV_CONFIG" || \
-        sed -i "/bin-environment/ a\\${vhost_line}" "$PHP_ENV_CONFIG"
-    grep -qP "$serverip_line" "$PHP_ENV_CONFIG" || \
-        sed -i "/bin-environment/ a\\${serverip_line}" "$PHP_ENV_CONFIG"
-    grep -qP "$php_error_line" "$PHP_ENV_CONFIG" || \
-        sed -i "/bin-environment/ a\\${php_error_line}" "$PHP_ENV_CONFIG"
-
-    echo "Added ENV to php:"
-    grep -E '(VIRTUAL_HOST|ServerIP|PHP_ERROR_LOG)' "$PHP_ENV_CONFIG"
-}
-
 setup_web_port() {
-    local warning="WARNING: Custom WEB_PORT not used"
-    # Quietly exit early for empty or default
-    if [[ -z "${1}" || "${1}" == '80' ]] ; then return ; fi
+    echo "TODO: Do we need this? why would you change the web port inside the container when you can change it outside?"
+    # local warning="WARNING: Custom WEB_PORT not used"
+    # # Quietly exit early for empty or default
+    # if [[ -z "${1}" || "${1}" == '80' ]] ; then return ; fi
 
-    if ! echo $1 | grep -q '^[0-9][0-9]*$' ; then
-        echo "$warning - $1 is not an integer"
-        return
-    fi
+    # if ! echo $1 | grep -q '^[0-9][0-9]*$' ; then
+    #     echo "$warning - $1 is not an integer"
+    #     return
+    # fi
 
-    local -i web_port="$1"
-    if (( $web_port < 1 || $web_port > 65535 )); then
-        echo "$warning - $web_port is not within valid port range of 1-65535"
-        return
-    fi
-    echo "Custom WEB_PORT set to $web_port"
-    echo "INFO: Without proper router DNAT forwarding to $ServerIP:$web_port, you may not get any blocked websites on ads"
+    # local -i web_port="$1"
+    # if (( $web_port < 1 || $web_port > 65535 )); then
+    #     echo "$warning - $web_port is not within valid port range of 1-65535"
+    #     return
+    # fi
+    # echo "Custom WEB_PORT set to $web_port"
+    # echo "INFO: Without proper router DNAT forwarding to $ServerIP:$web_port, you may not get any blocked websites on ads"
 
-    # Update lighttpd's port
-    sed -i '/server.port\s*=\s*80\s*$/ s/80/'$WEB_PORT'/g' /etc/lighttpd/lighttpd.conf
+    # # Update lighttpd's port
+    # sed -i '/server.port\s*=\s*80\s*$/ s/80/'$WEB_PORT'/g' /etc/lighttpd/lighttpd.conf
 
 }
 
@@ -246,21 +213,10 @@ setup_web_password() {
     fi
 }
 
-setup_ipv4_ipv6() {
-    local ip_versions="IPv4 and IPv6"
-    if [ "${IPv6,,}" != "true" ] ; then
-        ip_versions="IPv4"
-        sed -i '/use-ipv6.pl/ d' /etc/lighttpd/lighttpd.conf
-    fi;
-    echo "Using $ip_versions"
-}
-
 test_configs() {
     set -e
     echo -n '::: Testing pihole-FTL DNS: '
     sudo -u ${DNSMASQ_USER:-root} pihole-FTL test || exit 1
-    echo -n '::: Testing lighttpd config: '
-    lighttpd -t -f /etc/lighttpd/lighttpd.conf || exit 1
     set +e
     echo "::: All config checks passed, cleared for startup ..."
 }
