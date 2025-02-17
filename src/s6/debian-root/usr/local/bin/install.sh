@@ -10,20 +10,22 @@ WEB_LOCAL_REPO=/var/www/html/admin
 setupVars=/etc/pihole/setupVars.conf
 
 detect_arch() {
-  DETECTED_ARCH=$(dpkg --print-architecture)
+  DETECTED_ARCH=$(arch)
   S6_ARCH=$DETECTED_ARCH
   case $DETECTED_ARCH in
-  amd64)
-    S6_ARCH="x86_64";;
   armel)
     S6_ARCH="armhf";;
-  armhf)
+  armv7l)
     S6_ARCH="armhf";;
-  arm64)
-    S6_ARCH="aarch64";;
-  i386)
-    S6_ARCH="i686";;
-esac
+  x86_64)
+    # arch returns x86_64 on linux/i386, causing the wrong s6-overlay to be downloaded
+    # fallback to dpkg to check the architecture and download the i686 s6-overlay if necessary
+    # see https://github.com/pi-hole/docker-pi-hole/issues/1524 for more information
+    ARCH_CHECK=$(dpkg --print-architecture)
+    if [ "$ARCH_CHECK" == "i386" ]; then
+      S6_ARCH="i686"
+    fi    
+  esac
 }
 
 
@@ -31,7 +33,7 @@ DOCKER_TAG=$(cat /pihole.docker.tag)
 # Helps to have some additional tools in the dev image when debugging
 if [[ "${DOCKER_TAG}" = 'nightly' ||  "${DOCKER_TAG}" = 'dev' ]]; then
   apt-get update
-  apt-get install --no-install-recommends -y nano less
+  apt-get install --no-install-recommends -y nano less vim-tiny
   rm -rf /var/lib/apt/lists/*
 fi
 
@@ -86,11 +88,23 @@ sed -i $'s/)\s*uninstallFunc/) unsupportedFunc/g' /usr/local/bin/pihole
 # pihole -r / pihole reconfigure
 sed -i $'s/)\s*reconfigurePiholeFunc/) unsupportedFunc/g' /usr/local/bin/pihole
 
-# Move macvendor.db to root dir and symlink it back into /etc/pihole. See https://github.com/pi-hole/docker-pi-hole/issues/1137
+# Move macvendor.db to root dir See https://github.com/pi-hole/docker-pi-hole/issues/1137
+# During startup we will change FTL's configuration to point to this file instead of /etc/pihole/macvendor.db
 # If user goes on to bind monunt this directory to their host, then we can easily ensure macvendor.db is the latest
 # (it is otherwise only updated when FTL is updated, which doesn't happen as part of the normal course of running this image)
 mv /etc/pihole/macvendor.db /macvendor.db
-ln -s /macvendor.db /etc/pihole/macvendor.db
+
+
+## Remove the default lighttpd unconfigured config:
+if [ -f /etc/lighttpd/conf-enabled/99-unconfigured.conf ]; then
+  rm /etc/lighttpd/conf-enabled/99-unconfigured.conf
+fi
+## Remove the default lighttpd placeholder page for good measure
+if [ -f /var/www/html/index.lighttpd.html ]; then
+  rm /var/www/html/index.lighttpd.html
+fi
+## Remove redundant directories created by the installer to reduce docker image size
+rm -rf /tmp/*
 
 if [ ! -f /.piholeFirstBoot ]; then
   touch /.piholeFirstBoot

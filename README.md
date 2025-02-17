@@ -9,6 +9,8 @@
 
 - **Using Watchtower? See the [Note on Watchtower](#note-on-watchtower) at the bottom of this readme**
 
+- As of `2023.01`, if you have any modifications for lighttpd via an `external.conf` file, this file now needs to be mapped into `/etc/lighttpd/conf-enabled/whateverfile.conf` instead
+
 - Due to [a known issue with Docker and libseccomp <2.5](https://github.com/moby/moby/issues/40734), you may run into issues running `2022.04` and later on host systems with an older version of `libseccomp2` ([Such as Debian/Raspbian buster or Ubuntu 20.04](https://pkgs.org/download/libseccomp2), and maybe [CentOS 7](https://pkgs.org/download/libseccomp)).
 
   The first recommendation is to upgrade your host OS, which will include a more up to date (and fixed) version of `libseccomp`.
@@ -17,19 +19,12 @@
 
 - Some users [have reported issues](https://github.com/pi-hole/docker-pi-hole/issues/963#issuecomment-1095602502) with using the `--privileged` flag on `2022.04` and above. TL;DR, don't use that mode, and be [explicit with the permitted caps](https://github.com/pi-hole/docker-pi-hole#note-on-capabilities) (if needed) instead
 
-- As of `2022.04.01`, setting `CAP_NET_ADMIN` is only required if you are using Pi-hole as your DHCP server. The container will only try to set caps that are explicitly granted (or natively available)
-
-- In `2022.01` and later, the default `DNSMASQ_USER` has been changed to `pihole`, however this may cause issues on some systems such as Synology, see Issue [#963](https://github.com/pi-hole/docker-pi-hole/issues/963) for more information.
- If the container won't start due to issues setting capabilities, set `DNSMASQ_USER` to `root` in your environment.
-
 ## Quick Start
 
 1. Copy docker-compose.yml.example to docker-compose.yml and update as needed. See example below:
 [Docker-compose](https://docs.docker.com/compose/install/) example:
 
 ```yaml
-version: "3"
-
 # More info at https://github.com/pi-hole/docker-pi-hole/ and https://docs.pi-hole.net/
 services:
   pihole:
@@ -53,7 +48,7 @@ services:
       - NET_ADMIN # Required if you are using Pi-hole as your DHCP server, else not needed
     restart: unless-stopped
 ```
-2. Run `docker compose -f docker-compose.yml up -d` to build and start pi-hole
+2. Run `docker compose up -d` to build and start pi-hole (Syntax may be `docker-compose` on older systems)
 3. Use the Pi-hole web UI to change the DNS settings *Interface listening behavior* to "Listen on all interfaces, permit all origins", if using Docker's default `bridge` network setting. (This can also be achieved by setting the environment variable `DNSMASQ_LISTENING` to `all`)
 
 [Here is an equivalent docker run script](https://github.com/pi-hole/docker-pi-hole/blob/master/examples/docker_run.sh).
@@ -99,7 +94,7 @@ There are other environment variables if you want to customize various things in
 | -------- | ------- | ----- | ---------- |
 | `TZ` | UTC | `<Timezone>` | Set your [timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) to make sure logs rotate at local midnight instead of at UTC midnight.
 | `WEBPASSWORD` | random | `<Admin password>` | http://pi.hole/admin password. Run `docker logs pihole \| grep random` to find your random pass.
-| `FTLCONF_LOCAL_IPV4` | unset | `<Host's IP>` | Set to your server's LAN IP, used by web block modes and lighttpd bind address.
+| `FTLCONF_LOCAL_IPV4` | unset | `<Host's IP>` | Set to your server's LAN IP, used by web block modes.
 
 ### Optional Variables
 
@@ -121,12 +116,12 @@ There are other environment variables if you want to customize various things in
 | `PIHOLE_DOMAIN` | `lan` | `<domain>` | Domain name sent by the DHCP server.
 | `DHCP_IPv6` | `false` | `<"true"\|"false">` | Enable DHCP server IPv6 support (SLAAC + RA).
 | `DHCP_rapid_commit` | `false` | `<"true"\|"false">` | Enable DHCPv4 rapid commit (fast address assignment).
-| `VIRTUAL_HOST` | `$FTLCONF_LOCAL_IPV4` | `<Custom Hostname>` | What your web server 'virtual host' is, accessing admin through this Hostname/IP allows you to make changes to the whitelist / blacklists in addition to the default 'http://pi.hole/admin/' address
+| `VIRTUAL_HOST` | `${HOSTNAME}` | `<Custom Hostname>` | What your web server 'virtual host' is, accessing admin through this Hostname/IP allows you to make changes to the whitelist / blacklists in addition to the default 'http://pi.hole/admin/' address
 | `IPv6` | `true` | `<"true"\|"false">` | For unraid compatibility, strips out all the IPv6 configuration from DNS/Web services when false.
 | `TEMPERATUREUNIT` | `c` | `<c\|k\|f>` | Set preferred temperature unit to `c`: Celsius, `k`: Kelvin, or `f` Fahrenheit units.
 | `WEBUIBOXEDLAYOUT` | `boxed` | `<boxed\|traditional>` | Use boxed layout (helpful when working on large screens)
 | `QUERY_LOGGING` | `true` | `<"true"\|"false">` | Enable query logging or not.
-| `WEBTHEME` | `default-light` | `<"default-dark"\|"default-darker"\|"default-light"\|"default-auto"\|"lcars">`| User interface theme to use.
+| `WEBTHEME` | `default-light` | `<"default-dark"\|"default-darker"\|"default-light"\|"default-auto"\|"high-contrast"\|"high-contrast-dark"\|"lcars">`| User interface theme to use.
 | `WEBPASSWORD_FILE`| unset | `<Docker secret path>` |Set an Admin password using [Docker secrets](https://docs.docker.com/engine/swarm/secrets/). If `WEBPASSWORD` is set, `WEBPASSWORD_FILE` is ignored. If `WEBPASSWORD` is empty, and `WEBPASSWORD_FILE` is set to a valid readable file path, then `WEBPASSWORD` will be set to the contents of `WEBPASSWORD_FILE`.
 
 ### Advanced Variables
@@ -135,6 +130,7 @@ There are other environment variables if you want to customize various things in
 | `INTERFACE` | unset | `<NIC>` | The default works fine with our basic example docker run commands.  If you're trying to use DHCP with `--net host` mode then you may have to customize this or DNSMASQ_LISTENING.
 | `DNSMASQ_LISTENING` | unset | `<local\|all\|single>` | `local` listens on all local subnets, `all` permits listening on internet origin subnets in addition to local, `single` listens only on the interface specified.
 | `WEB_PORT` | unset | `<PORT>` | **This will break the 'webpage blocked' functionality of Pi-hole** however it may help advanced setups like those running synology or `--net=host` docker argument.  This guide explains how to restore webpage blocked functionality using a linux router DNAT rule: [Alternative Synology installation method](https://discourse.pi-hole.net/t/alternative-synology-installation-method/5454?u=diginc)
+| `WEB_BIND_ADDR` | unset | `<IP>` | Lighttpd's bind address. If left unset lighttpd will bind to every interface, except when running in host networking mode where it will use `FTLCONF_LOCAL_IPV4` instead.
 | `SKIPGRAVITYONBOOT` | unset | `<unset\|1>` | Use this option to skip updating the Gravity Database when booting up the container.  By default this environment variable is not set so the Gravity Database will be updated when the container starts up.  Setting this environment variable to 1 (or anything) will cause the Gravity Database to not be updated when container starts up.
 | `CORS_HOSTS` | unset | `<FQDNs delimited by ,>` | List of domains/subdomains on which CORS is allowed. Wildcards are not supported. Eg: `CORS_HOSTS: domain.com,home.domain.com,www.domain.com`.
 | `CUSTOM_CACHE_SIZE` | `10000` | Number | Set the cache size for dnsmasq. Useful for increasing the default cache size or to set it to 0. Note that when `DNSSEC` is "true", then this setting is ignored.
@@ -144,7 +140,7 @@ There are other environment variables if you want to customize various things in
 ### Experimental Variables
 | Variable | Default | Value | Description |
 | -------- | ------- | ----- | ---------- |
-| `DNSMASQ_USER` | unset | `<pihole\|root>` | Allows changing the user that FTLDNS runs as. Default: `pihole`|
+| `DNSMASQ_USER` | unset | `<pihole\|root>` | Allows changing the user that FTLDNS runs as. Default: `pihole`, some systems such as Synology NAS may require you to change this to `root` (See [#963](https://github.com/pi-hole/docker-pi-hole/issues/963)) |
 | `PIHOLE_UID` | `999` | Number | Overrides image's default pihole user id to match a host user id<br/>**IMPORTANT**: id must not already be in use inside the container! |
 | `PIHOLE_GID` | `999` | Number | Overrides image's default pihole group id to match a host group id<br/>**IMPORTANT**: id must not already be in use inside the container!|
 | `WEB_UID` | `33` | Number | Overrides image's default www-data user id to match a host user id<br/>**IMPORTANT**: id must not already be in use inside the container! (Make sure it is different to `PIHOLE_UID` if you are using that, also)|
@@ -162,8 +158,8 @@ While these may still work, they are likely to be removed in a future version. W
 | `CONDITIONAL_FORWARDING_REVERSE` | If conditional forwarding is enabled, set the reverse DNS of the local network router (e.g. `0.168.192.in-addr.arpa`) | `REV_SERVER_CIDR` |
 | `DNS1` | Primary upstream DNS provider, default is google DNS | `PIHOLE_DNS_` |
 | `DNS2` | Secondary upstream DNS provider, default is google DNS, `no` if only one DNS should used | `PIHOLE_DNS_` |
-| `ServerIP` | Set to your server's LAN IP, used by web block modes and lighttpd bind address | `FTLCONF_REPLY_ADDR4` |
-| `ServerIPv6` | **If you have a v6 network** set to your server's LAN IPv6 to block IPv6 ads fully | `FTLCONF_REPLY_ADDR6` |
+| `ServerIP` | Set to your server's LAN IP, used by web block modes and lighttpd bind address | `FTLCONF_LOCAL_IPV4` |
+| `ServerIPv6` | **If you have a v6 network** set to your server's LAN IPv6 to block IPv6 ads fully | `FTLCONF_LOCAL_IPV6` |
 | `FTLCONF_REPLY_ADDR4` | Set to your server's LAN IP, used by web block modes and lighttpd bind address | `FTLCONF_LOCAL_IPV4` |
 | `FTLCONF_REPLY_ADDR6` | **If you have a v6 network** set to your server's LAN IPv6 to block IPv6 ads fully | `FTLCONF_LOCAL_IPV6` |
 
@@ -228,14 +224,16 @@ Users of older Ubuntu releases (circa 17.04) will need to disable dnsmasq.
 
 The primary docker tags are explained in the following table.  [Click here to see the full list of tags](https://store.docker.com/community/images/pihole/pihole/tags). See [GitHub Release notes](https://github.com/pi-hole/docker-pi-hole/releases) to see the specific version of Pi-hole Core, Web, and FTL included in the release.
 
+The Date-based (including incremented "Patch" versions) do not relate to any kind of semantic version number, rather a date is used to differentiate between the new version and the old version, nothing more. Release notes will always contain full details of changes in the container, including changes to core Pi-hole components
+
 | tag                 | description
 |---------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
 | `latest`            | Always latest release                                                                                                                      |
-| `2022.04`           | Date-based release that can receive bugfix updates                                                                                         |
-| `2022.04.1`         | A specific image that will not receive updates                                                                                             |
+| `2022.04.0`         | Date-based release                                                                                                                         |
+| `2022.04.1`         | Second release in a given month                                                                                                            |
 | `dev`               | Similar to `latest`, but for the development branch (pushed occasionally)                                                                  |
 | `*beta`             | Early beta releases of upcoming versions - here be dragons                                                                                 |
-| `nightly`           | Like `dev` but pushed every night and pulls from the latest `development` branches of the core Pi-hole components (Pi-hole, AdminLTE, FTL) |
+| `nightly`           | Like `dev` but pushed every night and pulls from the latest `development` branches of the core Pi-hole components (Pi-hole, web, FTL)      |
 
 ## Upgrading, Persistence, and Customizations
 
@@ -254,7 +252,7 @@ Do not attempt to upgrade (`pihole -up`) or reconfigure (`pihole -r`).  New imag
     * If you care about your data (logs/customizations), make sure you have it volume-mapped or it will be deleted in this step.
 3. Start your container with the newer base image: `docker run <args> pihole/pihole` (`<args>` being your preferred run volumes and env vars)
 
-Why is this style of upgrading good?  A couple reasons: Everyone is starting from the same base image which has been tested to known it works.  No worrying about upgrading from A to B, B to C, or A to C is required when rolling out updates, it reduces complexity, and simply allows a 'fresh start' every time while preserving customizations with volumes.  Basically I'm encouraging [phoenix server](https://www.google.com/?q=phoenix+servers) principles for your containers.
+Why is this style of upgrading good?  A couple reasons: Everyone is starting from the same base image which has been tested to known it works.  No worrying about upgrading from A to B, B to C, or A to C is required when rolling out updates, it reduces complexity, and simply allows a 'fresh start' every time while preserving customizations with volumes.  Basically I'm encouraging [phoenix server](https://martinfowler.com/bliki/PhoenixServer.html) principles for your containers.
 
 To reconfigure Pi-hole you'll either need to use an existing container environment variables or if there is no a variable for what you need, use the web UI or CLI commands.
 

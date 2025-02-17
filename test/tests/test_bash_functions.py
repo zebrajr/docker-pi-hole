@@ -182,7 +182,7 @@ def test_debian_setup_php_env(docker, expected_lines, repeat_function):
         )
     for expected_line in expected_lines:
         search_config_cmd = (
-            "grep -c '{}' /etc/lighttpd/conf-enabled/15-fastcgi-php.conf".format(
+            "grep -c '{}' /etc/lighttpd/conf-enabled/15-pihole-admin.conf".format(
                 expected_line
             )
         )
@@ -247,3 +247,89 @@ def test_setupvars_trumps_random_password_if_set(docker, args_env, test_args):
 
     assert "Pre existing WEBPASSWORD found" in function.stdout
     assert docker.run(_grep("WEBPASSWORD=volumepass", SETUPVARS_LOC)).rc == 0
+
+
+@pytest.mark.parametrize(
+    "args_env,test_args,expected_bind,expect_warning",
+    [
+        ("-e FTLCONF_LOCAL_IPV4=192.0.2.10", "--net=host", "192.0.2.10", True),
+        ("-e FTLCONF_LOCAL_IPV4=192.0.2.10", "", "0.0.0.0", False),
+        (
+            "-e WEB_BIND_ADDR=192.0.2.20 -e FTLCONF_LOCAL_IPV4=192.0.2.10",
+            "--net=host",
+            "192.0.2.20",
+            False,
+        ),
+        (
+            "-e WEB_BIND_ADDR=192.0.2.20 -e FTLCONF_LOCAL_IPV4=192.0.2.10",
+            "",
+            "192.0.2.20",
+            False,
+        ),
+    ],
+)
+def test_setup_lighttpd_bind(
+    docker, args_env, test_args, expected_bind, expect_warning
+):
+    """Lighttpd's bind address is correctly set"""
+    WEB_CONFIG = "/etc/lighttpd/lighttpd.conf"
+    WARNING_EXTRACT = "[i] WARNING: running in host network mode forces"
+
+    function = docker.run(". /usr/local/bin/bash_functions.sh ; setup_lighttpd_bind")
+
+    if expect_warning:
+        assert WARNING_EXTRACT in function.stdout
+    else:
+        assert WARNING_EXTRACT not in function.stdout
+
+    config = docker.run(f"cat {WEB_CONFIG} | grep 'server.bind'")
+
+    if expected_bind == "0.0.0.0":
+        assert "server.bind" not in config.stdout
+    else:
+        assert f'server.bind		 = "{expected_bind}"' in config.stdout
+
+@pytest.fixture(autouse=True)
+def run_around_test_setup_web_theme(docker):
+    """Fixture to execute around test_setup_web_theme"""
+    docker.run("touch /var/www/html/admin/style/themes/{badtheme,bad.theme.css,goodtheme.css}")
+
+    yield
+
+    docker.run("rm /var/www/html/admin/style/themes/{badtheme,bad.theme.css,goodtheme.css}")
+
+@pytest.mark.parametrize(
+    "args_env,test_theme,expected_success",
+    [
+        ("-e WEBTHEME=asd", "asd", False),
+        ("-e WEBTHEME=default-light", "default-light", True),
+        #("-e WEBTHEME=", "", False), # the tested function does nothing in this case
+        ("-e WEBTHEME=default-dark", "default-dark", True),
+        ("-e WEBTHEME=efault-dark", "efault-dark", False),
+        ("-e WEBTHEME=efault-dar", "efault-dar", False),
+        ("-e WEBTHEME=default-dar", "default-dar", False),
+        ("-e WEBTHEME=xdefault-dark", "xdefault-dark", False),
+        ("-e WEBTHEME=xdefault-darkx", "xdefault-darkx", False),
+        ("-e WEBTHEME=default-darkx", "default-darkx", False),
+        ("-e WEBTHEME=badtheme", "badtheme", False), # the theme file does not have the right extension
+        ("-e WEBTHEME=badtheme.css", "badtheme.css", False), # hacking attempt ?
+        ("-e WEBTHEME=bad.theme", "bad.theme", False), # invalid name - has dot
+        ("-e WEBTHEME=goodtheme", "goodtheme", True),
+        ("-e WEBTHEME=goodtheme.css", "goodtheme.css", False), # hacking attempt ?
+        ("-e WEBTHEME=+", "+", False),
+        ("-e WEBTHEME=.", ".", False),
+    ],
+)
+def test_setup_web_theme(
+    docker, args_env, test_theme, expected_success
+):
+    """Web theme name validation works"""
+    DEFAULT_THEME = "default-light"
+    function = docker.run(". /usr/local/bin/bash_functions.sh ; setup_web_theme")
+
+    if expected_success:
+        assert f'  [i] setting web theme based on webtheme variable, using value {test_theme}' in function.stdout.lower()
+        assert docker.run(_grep(f'^WEBTHEME={test_theme}$', SETUPVARS_LOC)).rc == 0
+    else:
+        assert f'  [!] invalid theme name supplied: {test_theme}, falling back to {DEFAULT_THEME}.' in function.stdout.lower()
+        assert docker.run(_grep(f'^WEBTHEME={DEFAULT_THEME}$', SETUPVARS_LOC)).rc == 0

@@ -7,6 +7,25 @@ updates:
       interval: "weekly"
       day: saturday
       time: "10:00"
-    target-branch: dev
+    target-branch: development
+    reviewers:
+      - "pi-hole/docker-maintainers"
+  - package-ecosystem: "docker"
+    directory: "/src/"
+    schedule:
+      interval: "weekly"
+      day: saturday
+      time: "10:00"
+    target-branch: development
+    reviewers:
+      - "pi-hole/docker-maintainers"
+  - package-ecosystem: pip
+    directory: "/test"
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "10:00"
+    open-pull-requests-limit: 10
+    target-branch: development
     reviewers:
       - "pi-hole/docker-maintainers"

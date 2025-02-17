@@ -107,18 +107,16 @@ ensure_basic_configuration() {
         cp -f "${setupVars}" "${setupVars}.update.bak"
     fi
 
-    # Remove any existing macvendor.db and replace it with a symblink to the one moved to the root directory (see install.sh)
-    if [[ -f "/etc/pihole/macvendor.db" ]]; then
-        rm /etc/pihole/macvendor.db
+    # If FTLCONF_MACVENDORDB is not set
+    if [[ -z "${FTLCONF_MACVENDORDB:-}" ]]; then
+        # User is not passing in a custom location - so force FTL to use the file we moved to / during the build
+        changeFTLsetting "MACVENDORDB" "/macvendor.db"
     fi
-    ln -s /macvendor.db /etc/pihole/macvendor.db
 
     # When fresh empty directory volumes are used then we need to create this file
     if [ ! -f /etc/dnsmasq.d/01-pihole.conf ] ; then
         cp /etc/.pihole/advanced/01-pihole.conf /etc/dnsmasq.d/
     fi;
-
-    # setup_or_skip_gravity
 }
 
 validate_env() {
@@ -206,7 +204,7 @@ apply_FTL_Configs_From_Env(){
     # Get all exported environment variables starting with FTLCONF_ as a prefix and call the changeFTLsetting
     # function with the environment variable's suffix as the key. This allows applying any pihole-FTL.conf
     # setting defined here: https://docs.pi-hole.net/ftldns/configfile/
-    declare -px | grep FTLCONF_ | sed -E 's/declare -x FTLCONF_([^=]+)=\"(.+)\"/\1 \2/' | while read -r name value
+    declare -px | grep FTLCONF_ | sed -E 's/declare -x FTLCONF_([^=]+)=\"(|.+)\"/\1 \2/' | while read -r name value
     do
         echo "  [i] Applying pihole-FTL.conf setting $name=$value"
         changeFTLsetting "$name" "$value"
@@ -338,33 +336,60 @@ setup_FTL_ProcessDNSSettings(){
 }
 
 setup_lighttpd_bind() {
-    local serverip="${FTLCONF_LOCAL_IPV4}"
-    # if using '--net=host' only bind lighttpd on $FTLCONF_LOCAL_IPV4 and localhost
-    if grep -q "docker" /proc/net/dev && [[ $serverip != 0.0.0.0 ]]; then #docker (docker0 by default) should only be present on the host system
+    local bind_addr="${WEB_BIND_ADDR}"
+
+    if [[ -z "$bind_addr" ]]; then
+        # if using '--net=host' bind lighttpd on $FTLCONF_LOCAL_IPV4 (for backward compatibility with #154).
+        if grep -q "docker" /proc/net/dev && [[ $FTLCONF_LOCAL_IPV4 != 0.0.0.0 ]]; then #docker (docker0 by default) should only be present on the host system
+            echo "  [i] WARNING: running in host network mode forces lighttpd's bind address to \$FTLCONF_LOCAL_IPV4 ($FTLCONF_LOCAL_IPV4)."
+            echo "  [i] This behaviour is deprecated and will be removed in a future version. If your installation depends on a custom bind address (not 0.0.0.0) you should set the \$WEB_BIND_ADDR environment variable to the desired value."
+            bind_addr="${FTLCONF_LOCAL_IPV4}"
+        # bind on 0.0.0.0 by default
+        else
+            bind_addr="0.0.0.0"
+        fi
+    fi
+
+    # Overwrite lighttpd's bind address, always listen on localhost
+    if [[ $bind_addr != 0.0.0.0 ]]; then
         if ! grep -q "server.bind" /etc/lighttpd/lighttpd.conf ; then # if the declaration is already there, don't add it again
-            sed -i -E "s/server\.port\s+\=\s+([0-9]+)/server.bind\t\t = \"${serverip}\"\nserver.port\t\t = \1\n"\$SERVER"\[\"socket\"\] == \"127\.0\.0\.1:\1\" \{\}/" /etc/lighttpd/lighttpd.conf
+            sed -i -E "s/server\.port\s+\=\s+([0-9]+)/server.bind\t\t = \"${bind_addr}\"\nserver.port\t\t = \1\n"\$SERVER"\[\"socket\"\] == \"127\.0\.0\.1:\1\" \{\}/" /etc/lighttpd/lighttpd.conf
         fi
     fi
 }
 
 setup_web_php_env() {
-    if [ -z "$VIRTUAL_HOST" ] ; then
-      VIRTUAL_HOST="$FTLCONF_LOCAL_IPV4"
-    fi;
+    local config_file
+    config_file="/etc/lighttpd/conf-available/15-pihole-admin.conf"
+    # if the environment variable VIRTUAL_HOST is not set, or is empty, then set it to the hostname of the container
+    VIRTUAL_HOST="${VIRTUAL_HOST:-$HOSTNAME}"
 
     for config_var in "VIRTUAL_HOST" "CORS_HOSTS" "PHP_ERROR_LOG" "PIHOLE_DOCKER_TAG" "TZ"; do
-      local beginning_of_line="\t\t\t\"${config_var}\" => "
-      if grep -qP "$beginning_of_line" "$PHP_ENV_CONFIG" ; then
+      local beginning_of_line="                    \"${config_var}\" => "
+      if grep -qP "^$beginning_of_line" "$config_file" ; then
         # replace line if already present
-        sed -i "/${beginning_of_line}/c\\${beginning_of_line}\"${!config_var}\"," "$PHP_ENV_CONFIG"
+        sed -i "/${beginning_of_line}/c\\${beginning_of_line}\"${!config_var}\"," "$config_file"
       else
         # add line otherwise
-        sed -i "/bin-environment/ a\\${beginning_of_line}\"${!config_var}\"," "$PHP_ENV_CONFIG"
+        sed -i "/bin-environment/ a\\${beginning_of_line}\"${!config_var}\"," "$config_file"
       fi
     done
 
     echo "  [i] Added ENV to php:"
-    grep -E '(VIRTUAL_HOST|CORS_HOSTS|PHP_ERROR_LOG|PIHOLE_DOCKER_TAG|TZ)' "$PHP_ENV_CONFIG"
+    grep -E '(VIRTUAL_HOST|CORS_HOSTS|PHP_ERROR_LOG|PIHOLE_DOCKER_TAG|TZ)' "$config_file"
+
+    # Create an additional file in the lighttpd config directory to redirect the root to the admin page
+    # if the host matches either VIRTUAL_HOST (Or HOSTNAME if it is not set) or FTLCONF_LOCAL_IPV4
+    cat <<END > /etc/lighttpd/conf-enabled/15-pihole-admin-redirect-docker.conf
+    \$HTTP["url"] == "/" {
+        \$HTTP["host"] == "${VIRTUAL_HOST}" {
+            url.redirect = ("" => "/admin/")
+        }
+        \$HTTP["host"] == "${FTLCONF_LOCAL_IPV4}" {
+            url.redirect = ("" => "/admin/")
+        }
+    }
+END
 }
 
 setup_web_port() {
@@ -383,7 +408,7 @@ setup_web_port() {
         return
     fi
     echo "  [i] Custom WEB_PORT set to $web_port"
-    echo "  [i] Without proper router DNAT forwarding to $FTLCONF_LOCAL_IPV4:$web_port, you may not get any blocked websites on ads"
+    echo "  [i] Without proper router DNAT forwarding to ${WEB_BIND_ADDR:-$FTLCONF_LOCAL_IPV4}:$web_port, you may not get any blocked websites on ads"
 
     # Update lighttpd's port
     sed -i '/server.port\s*=\s*80\s*$/ s/80/'"${WEB_PORT}"'/g' /etc/lighttpd/lighttpd.conf
@@ -391,19 +416,16 @@ setup_web_port() {
 }
 
 setup_web_theme(){
-    # Parse the WEBTHEME variable, if it exists, and set the selected theme if it is one of the supported values.
-    # If an invalid theme name was supplied, setup WEBTHEME to use the default-light theme.
+    # Parse the WEBTHEME variable, if it exists, and set the selected theme if it is one of the supported values (i.e. it is one of the existing theme
+    # file names and passes a regexp sanity check). If an invalid theme name was supplied, setup WEBTHEME to use the default-light theme.
     if [ -n "${WEBTHEME}" ]; then
-        case "${WEBTHEME}" in
-        "default-dark" | "default-darker" | "default-light" | "default-auto" | "lcars")
-            echo "  [i] Setting Web Theme based on WEBTHEME variable, using value ${WEBTHEME}"
-            change_setting "WEBTHEME" "${WEBTHEME}"
-            ;;
-        *)
-            echo "  [!] Invalid theme name supplied: ${WEBTHEME}, falling back to default-light."
-            change_setting "WEBTHEME" "default-light"
-            ;;
-        esac
+      if grep -qf <(find /var/www/html/admin/style/themes/ -type f -printf '%f\n' | sed -ne 's/^\([a-zA-Z0-9_-]\+\)\.css$/\1/gp') -xF - <<< "${WEBTHEME}"; then
+        echo "  [i] Setting Web Theme based on WEBTHEME variable, using value ${WEBTHEME}"
+        change_setting "WEBTHEME" "${WEBTHEME}"
+      else
+        echo "  [!] Invalid theme name supplied: ${WEBTHEME}, falling back to default-light."
+        change_setting "WEBTHEME" "default-light"
+      fi
     fi
 }
 
